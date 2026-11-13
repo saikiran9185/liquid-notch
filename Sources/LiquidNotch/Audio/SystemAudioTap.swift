@@ -54,6 +54,8 @@ final class SampleRing: @unchecked Sendable {
 protocol AudioSource: AnyObject, Sendable {
     var sampleRate: Double { get }
     var ring: SampleRing { get }
+    /// Something plays out of this Mac now (any app's sound on the default output). Read on the analysis queue.
+    var outputPlaying: Bool { get }
     func start() throws
     func stop()
 }
@@ -166,6 +168,17 @@ final class SystemAudioTap: AudioSource, @unchecked Sendable {
     }
 
     deinit { stop() }
+
+    /// Whether any app is playing through the default output device (`kAudioDevicePropertyDeviceIsRunningSomewhere`). The
+    /// tap's own aggregate device holds no output device, so it doesn't count. True when it can't tell.
+    var outputPlaying: Bool {
+        var running: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(Self.defaultOutput(), &address, 0, nil, &size, &running) == noErr else { return true }
+        return running != 0
+    }
 
     /// The system's default output device (read only: nothing here ever sets it).
     static func defaultOutput() -> AudioObjectID {

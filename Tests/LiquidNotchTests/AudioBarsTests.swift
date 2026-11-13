@@ -10,6 +10,8 @@ final class AudioBarsTests: XCTestCase {
         let ring = SampleRing()
         let sampleRate = 48_000.0
         var fails = false
+        /// Something plays out of this Mac (a Jam or Spotify Connect elsewhere: nothing does).
+        var outputPlaying = true
         var starts = 0, stops = 0
         private var phase = 0.0
 
@@ -30,6 +32,7 @@ final class AudioBarsTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        UserDefaults.standard.set(true, forKey: AudioBars.blockCheckedKey)
         UserDefaults.standard.removeObject(forKey: AudioBars.retrySuppressedKey)
     }
 
@@ -124,6 +127,34 @@ final class AudioBarsTests: XCTestCase {
         run(b, src, seconds: 1, amplitude: 0)
         if case .failed = b.state {} else { XCTFail("only zeros for 3 s: failed, got \(b.state)") }
         XCTAssertEqual(src.stops, 1)
+    }
+
+    // A Spotify Jam or a song playing on another device: the player says it plays, but nothing comes out of this Mac.
+    // That silence isn't a denied permission: the bars animate meanwhile, never give up for good, and go live as soon as
+    // the sound comes here (owner, 11-12: "the bar doesn't work when I'm in a jam").
+    func testSilenceWhileNothingPlaysHereIsNotADenial() {
+        let src = FakeSource(), s = ManualScheduler(), b = bars(src, s)
+        src.outputPlaying = false
+        b.update(wanted: true)
+        run(b, src, seconds: 6, amplitude: 0)
+        XCTAssertEqual(b.state, .listening, "still listening, animating meanwhile")
+        XCTAssertFalse(b.showsReal)
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: AudioBars.retrySuppressedKey), "never blocked for later songs")
+        src.outputPlaying = true
+        run(b, src, seconds: 0.5, amplitude: 0.5)
+        XCTAssertTrue(b.showsReal, "live once the sound plays here")
+        XCTAssertEqual(src.starts, 1)
+    }
+
+    // The block a silent start used to leave behind is cleared once, so bars blocked by a Jam come back.
+    func testAnOldBlockIsClearedOnce() {
+        UserDefaults.standard.removeObject(forKey: AudioBars.blockCheckedKey)
+        UserDefaults.standard.set(true, forKey: AudioBars.retrySuppressedKey)
+        let src = FakeSource(), s = ManualScheduler(), b = bars(src, s)
+        b.update(wanted: true)
+        XCTAssertEqual(src.starts, 1, "the old block is gone")
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: AudioBars.blockCheckedKey))
+        b.shutdown()
     }
 
     func testAnimatedNeverTaps() {

@@ -61,8 +61,9 @@ enum SnapshotRunner {
             scenario.setup(d)
             let (t, mode) = stage.targets(for: d)
             // The tray with a song is 672 pt wide: its states get a wider crop.
-            let width = (d.groups.tray && d.groups.player) || d.groups.playerFocus ? 720.0 : 560
-            let height = d.groups.playerFocus ? 400.0 : d.groups.agentsCard != nil ? 380 : 220
+            let big = d.groups.playerFocus || d.island.dayLarge
+            let width = (d.groups.tray && d.groups.player) || big ? 720.0 : 560
+            let height = big ? 400.0 : d.groups.agentsCard != nil ? 380 : 220
             if let img = stage.image(t.restingFrame(mode), targets: t, mode: mode, region: Region(width: width, height: height),
                                      content: d) {
                 labelled.append((scenario.name, img))
@@ -411,6 +412,13 @@ enum SnapshotRunner {
                     d.startMusic(); d.openTray(at: .shelf)
                 },
                 Scenario(name: "tray · Shelf, empty") { d in d.openTray(at: .shelf) },
+                // Calendar (11-12): an event's ball peeks; a click on its card opens your day.
+                Scenario(name: "calendar · the event's ball peeks") { d in
+                    d.startMusic(); sampleClass(d); d.pointerMoved(hit: .bubble(0), corridor: false, buttonDown: false)
+                },
+                Scenario(name: "calendar · your day") { d in sampleDay(d); sampleClass(d); d.openDay() },
+                Scenario(name: "calendar · your day, free now") { d in sampleDay(d, free: true); d.openDay() },
+                Scenario(name: "media · player, shuffle on") { d in d.startMusic(); d.pointerDown(at: .zero, hit: .ears); d.toggleShuffle() },
             ]
             return list
         }
@@ -680,4 +688,31 @@ private func sampleChat(_ d: IslandDirector, _ id: String = "c1") {
                                                     "$ swift test --filter AgentChatTests", "$ swift build"]),
         .agent("Done: hovering a ball swells it and shows its peek; a **click** opens its chat."),
     ]
+}
+
+/// A day of events around now: one all day, one past, one on now, two to come (`free`: nothing on now).
+@MainActor private func sampleDay(_ d: IslandDirector, free: Bool = false) {
+    let n = d.date(), h = 3600.0
+    var items = [
+        AgendaItem(id: "d0", title: "Mom's birthday", start: n.addingTimeInterval(-10 * h), end: n.addingTimeInterval(10 * h),
+                   allDay: true, calendar: "Family", colorHex: "#FF9F0A"),
+        AgendaItem(id: "d1", title: "Calculus II", start: n.addingTimeInterval(-2 * h), end: n.addingTimeInterval(-h),
+                   allDay: false, calendar: "School", colorHex: "#30D158"),
+        AgendaItem(id: "d3", title: "Lunch", start: n.addingTimeInterval(1.5 * h), end: n.addingTimeInterval(2.5 * h),
+                   allDay: false, calendar: "Personal", colorHex: "#BF5AF2"),
+        AgendaItem(id: "d4", title: "Design review", start: n.addingTimeInterval(4 * h), end: n.addingTimeInterval(5 * h),
+                   allDay: false, calendar: "Work", colorHex: "#0A84FF"),
+    ]
+    if !free {
+        items.insert(AgendaItem(id: "d2", title: "Physics lab", start: n.addingTimeInterval(-1200), end: n.addingTimeInterval(2400),
+                                allDay: false, calendar: "School", colorHex: "#30D158"), at: 2)
+    }
+    d.agendaChanged(items)
+}
+
+/// A class that started 20 minutes ago, as the real feed sends it.
+@MainActor private func sampleClass(_ d: IslandDirector) {
+    let n = d.date()
+    d.meetingChanged(MeetingInfo(title: "Physics lab", start: n.addingTimeInterval(-1200), end: n.addingTimeInterval(2400),
+                                 joinURL: nil, initials: [], more: 0))
 }

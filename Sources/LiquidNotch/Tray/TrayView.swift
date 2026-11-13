@@ -208,6 +208,7 @@ private struct Pill<Icon: View>: View {
 private struct TodayPage: View {
     let tray: TrayModel
     let director: IslandDirector
+    @Environment(\.presenting) private var presenting
 
     /// The tool's label: the next start time, or "Now" while something's on and nothing is next today.
     static func nextLabel(_ agenda: [AgendaItem], now: Date) -> String? {
@@ -237,7 +238,7 @@ private struct TodayPage: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 6) {
                                         ForEach(allDay) { e in
-                                            Text(e.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                                            Text(presenting ? "Event" : e.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                                                 .padding(.horizontal, 8).padding(.vertical, 4)
                                                 .background(Capsule().fill(Color(hex: e.colorHex).opacity(0.35)))
                                         }
@@ -265,6 +266,7 @@ private struct TodayPage: View {
 private struct DayLarge: View {
     let director: IslandDirector
     let now: Date
+    @Environment(\.presenting) private var presenting
 
     var body: some View {
         let timed = director.agenda.filter { !$0.allDay }
@@ -287,7 +289,7 @@ private struct DayLarge: View {
                 let left = Int((e.end.timeIntervalSince(now) / 60).rounded(.up))
                 let tint = left <= 5 ? IslandColor.red : Color(hex: e.colorHex)
                 Text("NOW").font(.system(size: 10, weight: .bold)).tracking(0.6).foregroundStyle(tint)
-                Text(e.title).font(.system(size: 17, weight: .semibold)).lineLimit(2).padding(.top, 4)
+                Text(presenting ? "Event" : e.title).font(.system(size: 17, weight: .semibold)).lineLimit(2).padding(.top, 4)
                 Text("\(e.start.formatted(date: .omitted, time: .shortened)) – \(e.end.formatted(date: .omitted, time: .shortened))")
                     .font(.system(size: 12).monospacedDigit()).foregroundStyle(.white.opacity(0.55)).padding(.top, 2)
                 Spacer(minLength: 10)
@@ -317,7 +319,7 @@ private struct DayLarge: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Next · " + (mins >= 60 ? "in \(mins / 60)h \(mins % 60)m" : "in \(mins) min"))
                             .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.5))
-                        Text(next.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                        Text(presenting ? "Event" : next.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
                     }
                 }
                 .padding(.top, 12)
@@ -339,7 +341,7 @@ private struct DayLarge: View {
                                 .frame(width: 58, alignment: .trailing)
                             RoundedRectangle(cornerRadius: 1.5).fill(Color(hex: e.colorHex)).frame(width: 3, height: 32)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(e.title).font(.system(size: 13, weight: on ? .semibold : .regular)).lineLimit(1)
+                                Text(presenting ? "Event" : e.title).font(.system(size: 13, weight: on ? .semibold : .regular)).lineLimit(1)
                                 Text(e.calendar.isEmpty ? e.end.formatted(date: .omitted, time: .shortened)
                                      : "until \(e.end.formatted(date: .omitted, time: .shortened)) · \(e.calendar)")
                                     .font(.system(size: 11).monospacedDigit()).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
@@ -379,6 +381,7 @@ struct LineBar: View {
 private struct AgendaRow: View {
     let item: AgendaItem
     let now: Date
+    @Environment(\.presenting) private var presenting
 
     var body: some View {
         let on = item.isNow(now)
@@ -386,7 +389,7 @@ private struct AgendaRow: View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 1.5).fill(Color(hex: item.colorHex)).frame(width: 3, height: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(item.title).font(.system(size: 12, weight: on ? .semibold : .regular)).lineLimit(1)
+                Text(presenting ? "Event" : item.title).font(.system(size: 12, weight: on ? .semibold : .regular)).lineLimit(1)
                 Text(detail(on: on)).font(.system(size: 10).monospacedDigit()).foregroundStyle(.white.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)

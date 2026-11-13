@@ -47,6 +47,8 @@ final class AudioBars {
     /// A silent tap usually means capture was denied. Do not trigger another system prompt on every playback;
     /// Setup's explicit Allow action is the only retry after this point.
     nonisolated static let retrySuppressedKey = "bars.retrySuppressed"
+    /// The old block (any silent start, a Jam's included) was cleared once (11-12).
+    nonisolated static let blockCheckedKey = "bars.blockChecked"
     nonisolated static let permissionCheckCompleted = Notification.Name("LiquidNotchAudioPermissionCheckCompleted")
     private static let log = Logger(subsystem: "com.fellipe.liquidnotch", category: "audio")
 
@@ -62,6 +64,11 @@ final class AudioBars {
 
     init() {
         mode = Mode(rawValue: UserDefaults.standard.string(forKey: Self.modeKey) ?? "") ?? .realAudio
+        // Up to 1.1.1 any silent start blocked the bars for good, a Jam's included: clear that once.
+        if !UserDefaults.standard.bool(forKey: Self.blockCheckedKey) {
+            UserDefaults.standard.removeObject(forKey: Self.retrySuppressedKey)
+            UserDefaults.standard.set(true, forKey: Self.blockCheckedKey)
+        }
         failedThisTime = UserDefaults.standard.bool(forKey: Self.retrySuppressedKey)
         let f = UserDefaults.standard.double(forKey: "bars.fps")
         fps = f == 60 ? 60 : 30
@@ -165,7 +172,10 @@ final class AudioBars {
     private func received(_ frame: AudioAnalyzer.Frame) {
         guard source != nil else { return }
         if frame.silent && state != .live {
-            // Nothing but zeros since it started: no permission, most likely.
+            // Nothing plays out of this Mac (a Spotify Jam, or the song on another device): silence is expected, not a
+            // denied permission. Keep listening (the bars animate meanwhile) and start the 3 s again.
+            if !frame.outputPlaying { startedAt = clock(); return }
+            // Sound plays here but only zeros reach the tap: no permission, most likely.
             if clock() - startedAt >= 3 { fail("only silence from the tap (System Audio Recording not allowed?)") }
             return
         }
@@ -216,6 +226,8 @@ final class AudioAnalyzer: @unchecked Sendable {
         let levels: [Float]
         /// Every sample was exactly zero.
         let silent: Bool
+        /// Something played out of this Mac (only read while silent; true otherwise).
+        var outputPlaying = true
         /// How much new sound this frame brought (`AudioSpectrum.onset`).
         var onset: Float = 0
         /// When it was analysed (`CACurrentMediaTime`), nil from tests' frames.
@@ -238,7 +250,9 @@ final class AudioAnalyzer: @unchecked Sendable {
     func analyze(dt: Float) -> Frame {
         let n = source.ring.latest(into: scratch, count: spectrum.size)
         let levels = spectrum.process(UnsafeBufferPointer(start: scratch, count: n), dt: dt)
-        return Frame(levels: levels, silent: spectrum.silent, onset: spectrum.onset, at: CACurrentMediaTime())
+        let silent = spectrum.silent
+        return Frame(levels: levels, silent: silent, outputPlaying: silent ? source.outputPlaying : true,
+                     onset: spectrum.onset, at: CACurrentMediaTime())
     }
 }
 
